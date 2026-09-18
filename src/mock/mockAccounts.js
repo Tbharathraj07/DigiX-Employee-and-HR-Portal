@@ -1,0 +1,50 @@
+export const DEMO_ACCOUNTS = [
+  {
+    id: "DGX003",
+    name: "Tarumani Bharath Raj",
+    email: "tarumani.bharathraj@digix.internal",
+    password: "demo",
+    role: "employee",
+    roleTitle: "Associate Software Developer",
+    department: "Technology",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    phone: "+91 98765 43210",
+    location: "Hyderabad, India",
+    manager: "Priyanka",
+    joinDate: "2024-06-01",
+    band: "L3 - Associate",
+    badgeNumber: "DX-00301"
+  },
+  {
+    id: "HR001",
+    name: "Priyanka",
+    email: "priyanka@digix.internal",
+    password: "demo",
+    role: "hr",
+    roleTitle: "HR Manager",
+    department: "Human Resources",
+    avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
+    phone: "+1 (555) 432-1098",
+    location: "New York, NY (Headquarters)",
+    manager: "Elena Rostova (Chief People Officer)",
+    joinDate: "2021-08-01",
+    band: "L6 - Manager",
+    badgeNumber: "DX-00412"
+  },
+  {
+    id: "ADM001",
+    name: "Marcus Vance",
+    email: "marcus.vance@digix.internal",
+    password: "demo",
+    role: "admin",
+    roleTitle: "System Administrator",
+    department: "IT & Security",
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    phone: "+1 (555) 890-5674",
+    location: "Austin, TX (Remote)",
+    manager: "Devon Clark (Chief Technology Officer)",
+    joinDate: "2020-01-10",
+    band: "L8 - Principal",
+    badgeNumber: "DX-00088"
+  }
+];
