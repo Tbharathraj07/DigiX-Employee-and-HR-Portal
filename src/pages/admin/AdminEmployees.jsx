@@ -1,13 +1,15 @@
 import React from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Table } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
-import { Building, Upload, Download, RefreshCw } from 'lucide-react';
+import { Building, Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 
 export const AdminEmployees = () => {
-  const { employees } = usePortalData();
+  const { isSupabaseAuth } = useAuth();
+  const { employees, isLoadingEmployees, employeesError, fetchEmployees } = usePortalData();
   const { addToast } = useToast();
 
   const columns = [
@@ -45,6 +47,25 @@ export const AdminEmployees = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {isSupabaseAuth && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<RefreshCw className={`w-4 h-4 ${isLoadingEmployees ? 'animate-spin' : ''}`} />}
+              onClick={() => {
+                fetchEmployees?.();
+                addToast({
+                  type: 'info',
+                  title: 'Refreshing...',
+                  message: 'Synchronizing master employee records from Supabase.'
+                });
+              }}
+              disabled={isLoadingEmployees}
+            >
+              Sync
+            </Button>
+          )}
+
           <Button
             size="sm"
             variant="outline"
@@ -77,7 +98,25 @@ export const AdminEmployees = () => {
         </div>
       </div>
 
-      <Table columns={columns} data={employees} />
+      {employeesError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>Failed to load master employees from Supabase: {employeesError}</span>
+          </div>
+          <Button size="xs" variant="outline" onClick={() => fetchEmployees?.()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      <Table
+        columns={columns}
+        data={employees}
+        isLoading={isLoadingEmployees}
+        emptyMessage="No employee records found in master registry."
+      />
     </div>
   );
 };
+

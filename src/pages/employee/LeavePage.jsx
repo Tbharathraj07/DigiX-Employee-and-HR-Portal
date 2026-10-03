@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { usePortalData } from '../../context/DataContext';
+import { usePortalData, calculateLeaveDays } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -9,11 +9,18 @@ import { Table } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
-import { CalendarOff, Plus, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { CalendarOff, Plus, Clock, CheckCircle2, XCircle, RotateCw } from 'lucide-react';
 
 export const LeavePage = () => {
-  const { user } = useAuth();
-  const { leaveBalances, leaveRequests, submitLeaveRequest } = usePortalData();
+  const { user, isSupabaseAuth } = useAuth();
+  const {
+    leaveBalances,
+    leaveRequests,
+    submitLeaveRequest,
+    fetchLeaveRequests,
+    fetchLeaveBalances,
+    isLoadingLeaves
+  } = usePortalData();
   const { addToast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,8 +29,30 @@ export const LeavePage = () => {
   const [endDate, setEndDate] = useState('');
   const [daysCount, setDaysCount] = useState(1);
   const [reason, setReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleApplyLeave = (e) => {
+  useEffect(() => {
+    if (isSupabaseAuth) {
+      if (typeof fetchLeaveRequests === 'function') fetchLeaveRequests();
+      if (typeof fetchLeaveBalances === 'function') fetchLeaveBalances();
+    }
+  }, [isSupabaseAuth, fetchLeaveRequests, fetchLeaveBalances]);
+
+  const handleStartDateChange = (val) => {
+    setStartDate(val);
+    if (val && endDate && val <= endDate) {
+      setDaysCount(calculateLeaveDays(val, endDate));
+    }
+  };
+
+  const handleEndDateChange = (val) => {
+    setEndDate(val);
+    if (startDate && val && startDate <= val) {
+      setDaysCount(calculateLeaveDays(startDate, val));
+    }
+  };
+
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
     if (!startDate || !endDate || !reason.trim()) {
       addToast({
@@ -34,32 +63,67 @@ export const LeavePage = () => {
       return;
     }
 
-    submitLeaveRequest({
-      employeeId: user.id,
-      employeeName: user.name,
-      department: user.department,
-      type: leaveType,
-      startDate,
-      endDate,
-      days: Number(daysCount),
-      reason
-    });
+    if (endDate < startDate) {
+      addToast({
+        type: 'warning',
+        title: 'Invalid Date Range',
+        message: 'End date cannot be earlier than start date.'
+      });
+      return;
+    }
 
-    setIsModalOpen(false);
-    setReason('');
-    setStartDate('');
-    setEndDate('');
-    addToast({
-      type: 'success',
-      title: 'Leave Application Submitted',
-      message: 'Your request has been routed to HR and your manager for approval.'
-    });
+    setIsSubmitting(true);
+    try {
+      await submitLeaveRequest({
+        employeeId: user?.id,
+        employeeName: user?.name,
+        department: user?.department,
+        type: leaveType,
+        startDate,
+        endDate,
+        days: Number(daysCount),
+        reason: reason.trim()
+      });
+
+      setIsModalOpen(false);
+      setReason('');
+      setStartDate('');
+      setEndDate('');
+      setDaysCount(1);
+      addToast({
+        type: 'success',
+        title: 'Leave Application Submitted',
+        message: 'Your leave request has been submitted to People Operations for review.'
+      });
+    } catch (err) {
+      console.error('[LeavePage] Error submitting leave application:', err);
+      addToast({
+        type: 'error',
+        title: 'Submission Failed',
+        message: err.message || 'Failed to submit leave request. Please try again.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const userRequests = leaveRequests.filter((r) => r.employeeName === user.name || r.employeeName === 'Tarumani Bharath Raj' || r.employeeId === user?.id);
+  const userRequests = isSupabaseAuth
+    ? leaveRequests
+    : leaveRequests.filter(
+        (r) =>
+          r.employeeUuid === user?.dbId ||
+          r.employeeId === user?.id ||
+          r.employeeName === user?.name ||
+          r.employeeId === user?.dbId
+      );
 
   const columns = [
-    { header: 'Request ID', accessor: 'id', cellClassName: 'font-mono text-xs font-semibold text-slate-800' },
+    {
+      header: 'Request ID',
+      accessor: 'id',
+      cellClassName: 'font-mono text-xs font-semibold text-slate-800',
+      render: (row) => <span>{row.displayId || row.id}</span>
+    },
     { header: 'Leave Type', accessor: 'type', cellClassName: 'text-xs font-medium text-slate-800' },
     {
       header: 'Duration',
@@ -76,9 +140,9 @@ export const LeavePage = () => {
       render: (row) => (
         <Badge
           variant={
-            row.status === 'Approved'
+            row.status?.toLowerCase() === 'approved'
               ? 'success'
-              : row.status === 'Rejected'
+              : row.status?.toLowerCase() === 'rejected'
               ? 'danger'
               : 'warning'
           }
@@ -90,7 +154,7 @@ export const LeavePage = () => {
       )
     },
     {
-      header: 'Manager Notes',
+      header: 'HR Notes',
       render: (row) => (
         <span className="text-xs text-slate-500 italic">
           {row.managerNote || 'Pending review'}
@@ -109,13 +173,30 @@ export const LeavePage = () => {
           </p>
         </div>
 
-        <Button
-          size="sm"
-          leftIcon={<Plus className="w-4 h-4" />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          Apply for Leave
-        </Button>
+        <div className="flex items-center gap-2">
+          {isSupabaseAuth && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<RotateCw className={`w-3.5 h-3.5 ${isLoadingLeaves ? 'animate-spin' : ''}`} />}
+              onClick={() => {
+                if (fetchLeaveRequests) fetchLeaveRequests();
+                if (fetchLeaveBalances) fetchLeaveBalances();
+              }}
+              disabled={isLoadingLeaves}
+            >
+              Refresh
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            leftIcon={<Plus className="w-4 h-4" />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            Apply for Leave
+          </Button>
+        </div>
       </div>
 
       {/* Leave Balances Cards */}
@@ -135,7 +216,7 @@ export const LeavePage = () => {
             <div className="w-full h-2 bg-slate-100 rounded-full mt-3 overflow-hidden">
               <div
                 className="h-full bg-digix-500 rounded-full"
-                style={{ width: `${(balance.available / balance.total) * 100}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, (balance.available / (balance.total || 1)) * 100))}%` }}
               />
             </div>
           </div>
@@ -175,14 +256,14 @@ export const LeavePage = () => {
               label="Start Date"
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => handleStartDateChange(e.target.value)}
               required
             />
             <Input
               label="End Date"
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e) => handleEndDateChange(e.target.value)}
               required
             />
           </div>
@@ -215,7 +296,7 @@ export const LeavePage = () => {
             <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" isLoading={isSubmitting}>
               Submit Application
             </Button>
           </div>

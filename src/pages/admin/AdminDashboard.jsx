@@ -18,8 +18,12 @@ import {
 
 export const AdminDashboard = () => {
   const { user } = useAuth();
-  const { auditLogs, employees, projects } = usePortalData();
+  const { auditLogs, employees, projects, tasks, leaveRequests, candidates } = usePortalData();
   const navigate = useNavigate();
+
+  const activeEmployees = employees.filter((e) => e.status === 'Active' || e.status === 'active');
+  const pendingLeaves = leaveRequests.filter((r) => r.status === 'Pending');
+  const activeCandidates = candidates.filter((c) => c.stage !== 'Hired');
 
   return (
     <div className="space-y-6">
@@ -42,16 +46,16 @@ export const AdminDashboard = () => {
       {/* System Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Cluster Health"
-          value="99.98%"
-          subtitle="Zero unhandled outages (30d)"
+          title="Cluster & DB Health"
+          value="Operational"
+          subtitle="Supabase Cloud connected"
           icon={Server}
           color="emerald"
         />
         <StatCard
           title="Active Portal Users"
-          value={employees.length + 238}
-          subtitle="Across 3 global regions"
+          value={employees.length}
+          subtitle={`${activeEmployees.length} active employee profiles`}
           icon={Users}
           color="blue"
           onClick={() => navigate('/admin/users')}
@@ -59,7 +63,7 @@ export const AdminDashboard = () => {
         <StatCard
           title="Security Score"
           value="A+"
-          subtitle="SOC2 & ISO 27001 compliant"
+          subtitle="SOC2 & Supabase RLS Active"
           icon={ShieldCheck}
           color="purple"
           onClick={() => navigate('/admin/security-logs')}
@@ -67,7 +71,7 @@ export const AdminDashboard = () => {
         <StatCard
           title="Audit Trail Logs"
           value={auditLogs.length}
-          subtitle="Events recorded in live session"
+          subtitle="Events recorded in Supabase"
           icon={Activity}
           color="amber"
           onClick={() => navigate('/admin/security-logs')}
@@ -93,35 +97,42 @@ export const AdminDashboard = () => {
             }
           >
             <div className="space-y-2.5">
-              {auditLogs.slice(0, 6).map((log) => (
-                <div
-                  key={log.id}
-                  className="p-3 rounded-xl border border-slate-100 hover:bg-slate-50 flex items-center justify-between text-xs transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        log.status === 'Success'
-                          ? 'bg-emerald-500'
-                          : log.status === 'Warning'
-                          ? 'bg-amber-500'
-                          : 'bg-rose-500'
-                      }`}
-                    />
-                    <div>
-                      <p className="font-semibold text-slate-800">{log.action}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                        <span className="font-mono">{log.ip}</span>
-                        <span>•</span>
-                        <span>{log.module}</span>
+              {auditLogs.length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400">
+                  No system audit events recorded yet.
+                </div>
+              ) : (
+                auditLogs.slice(0, 6).map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-3 rounded-xl border border-slate-100 hover:bg-slate-50 flex items-center justify-between text-xs transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          log.status === 'Success'
+                            ? 'bg-emerald-500'
+                            : log.status === 'Warning'
+                            ? 'bg-amber-500'
+                            : 'bg-rose-500'
+                        }`}
+                      />
+                      <div>
+                        <p className="font-semibold text-slate-800">{log.action}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{log.ip}</span>
+                          <span>•</span>
+                          <span>{log.module}</span>
+                          {log.userName && <span>• {log.userName}</span>}
+                        </div>
                       </div>
                     </div>
+                    <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
+                      {log.timestamp ? (log.timestamp.split(' ')[1] || log.timestamp) : ''}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
-                    {log.timestamp.split(' ')[1] || log.timestamp}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </Card>
         </div>
@@ -161,6 +172,27 @@ export const AdminDashboard = () => {
                   <span>Latency: 82ms</span>
                   <span>Load: 31%</span>
                 </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Live System Entities">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Active Projects</span>
+                <span className="text-sm font-bold text-slate-900">{projects.length}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Tracked Tasks</span>
+                <span className="text-sm font-bold text-slate-900">{tasks.length}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Pending Leaves</span>
+                <span className="text-sm font-bold text-slate-900">{pendingLeaves.length}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Active Candidates</span>
+                <span className="text-sm font-bold text-slate-900">{activeCandidates.length}</span>
               </div>
             </div>
           </Card>

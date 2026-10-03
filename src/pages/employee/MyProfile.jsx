@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
@@ -27,28 +28,272 @@ import {
   XCircle,
   ArrowRight,
   AlertCircle,
-  Lock
+  Lock,
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export const MyProfile = () => {
-  const { user } = useAuth();
-  const { employees, profileRequests, submitProfileRequest } = usePortalData();
+  const { user, refreshProfile, isSupabaseAuth, updateUserAvatar } = useAuth();
+  const { employees, profileRequests, submitProfileRequest, fetchProfileRequests, isLoadingProfileRequests, updateOwnAvatar } = usePortalData();
   const { addToast } = useToast();
 
-  // Get live synced employee record
-  const liveEmployee = employees.find((e) => e.id === user?.id) || user;
+  // Refresh profile from Supabase on mount if authenticated via Supabase
+  useEffect(() => {
+    if (isSupabaseAuth && refreshProfile) {
+      refreshProfile();
+    }
+  }, [isSupabaseAuth, refreshProfile]);
+
+  // Get live synced employee record: prefer Supabase-authenticated profile when active
+  const liveEmployee = isSupabaseAuth ? user : (employees.find((e) => e.id === user?.id) || user);
+
+  // Live emergency contact state
+  const [emergencyContact, setEmergencyContact] = useState(() => {
+    if (!isSupabaseAuth) {
+      return (employees.find((e) => e.id === user?.id) || user)?.emergencyContact || null;
+    }
+    return user?.emergencyContact || null;
+  });
+  const [isLoadingEmergencyContact, setIsLoadingEmergencyContact] = useState(false);
+
+  // Load emergency contact from Supabase for real authenticated employee
+  useEffect(() => {
+    if (!isSupabaseAuth || !user?.dbId) {
+      const fallback = (employees.find((e) => e.id === user?.id) || user)?.emergencyContact || null;
+      setEmergencyContact(fallback);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchEmergencyContact = async () => {
+      setIsLoadingEmergencyContact(true);
+      try {
+        const { data, error } = await supabase
+          .from('emergency_contacts')
+          .select('id, employee_id, name, relationship, phone, email, is_primary')
+          .eq('employee_id', user.dbId)
+          .order('is_primary', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (isMounted) {
+          if (!error && data) {
+            setEmergencyContact(data);
+          } else {
+            setEmergencyContact(null);
+          }
+        }
+      } catch (err) {
+        console.warn('[MyProfile] Error fetching emergency contact:', err);
+        if (isMounted) setEmergencyContact(null);
+      } finally {
+        if (isMounted) setIsLoadingEmergencyContact(false);
+      }
+    };
+
+    fetchEmergencyContact();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isSupabaseAuth, user?.dbId]);
 
   const [activeTab, setActiveTab] = useState('overview');
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Avatar upload and preview modal states
+  const fileInputRef = useRef(null);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState(null);
+
+  const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp'];
+  const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
+
+  const handleOpenAvatarPicker = () => {
+    setAvatarUploadError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleAvatarFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file extension
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.includes(ext)) {
+      const msg = 'Unsupported file format. Please upload a JPG, JPEG, PNG, or WEBP image.';
+      setAvatarUploadError(msg);
+      addToast({
+        type: 'error',
+        title: 'Unsupported File Format',
+        message: msg
+      });
+      return;
+    }
+
+    // Check MIME type if available
+    if (file.type && !ALLOWED_IMAGE_MIMES.includes(file.type.toLowerCase())) {
+      const msg = 'Invalid image type detected. Please select a valid JPG, JPEG, PNG, or WEBP image.';
+      setAvatarUploadError(msg);
+      addToast({
+        type: 'error',
+        title: 'Invalid File Type',
+        message: msg
+      });
+      return;
+    }
+
+    // Check file size (5MB maximum)
+    if (file.size > MAX_AVATAR_SIZE) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      const msg = `File size is ${sizeMb} MB, which exceeds the 5 MB limit. Please select an image under 5 MB.`;
+      setAvatarUploadError(msg);
+      addToast({
+        type: 'error',
+        title: 'File Too Large',
+        message: msg
+      });
+      return;
+    }
+
+    // Validation passed -> construct preview and open confirmation dialog
+    setAvatarUploadError(null);
+    setAvatarFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setAvatarPreviewUrl(objectUrl);
+    setIsAvatarModalOpen(true);
+  };
+
+  const handleCancelAvatarModal = () => {
+    if (avatarPreviewUrl) {
+      URL.revokeObjectURL(avatarPreviewUrl);
+    }
+    setAvatarPreviewUrl(null);
+    setAvatarFile(null);
+    setAvatarUploadError(null);
+    setIsAvatarModalOpen(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!avatarFile || !liveEmployee) return;
+
+    setIsUploadingAvatar(true);
+    setAvatarUploadError(null);
+
+    const oldAvatarUrl = liveEmployee.avatar;
+    const empDbId = liveEmployee.dbId || liveEmployee.id;
+
+    try {
+      const ext = (avatarFile.name.split('.').pop() || 'png').toLowerCase();
+      const sanitizedName = `avatar_${Date.now()}.${ext}`;
+      const storagePath = `${empDbId}/avatars/${sanitizedName}`;
+
+      let persistentAvatarUrl = null;
+
+      if (isSupabaseAuth && supabase) {
+        // Upload to employee-documents bucket in caller's folder
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('employee-documents')
+          .upload(storagePath, avatarFile, {
+            contentType: avatarFile.type || 'image/png',
+            upsert: false
+          });
+
+        if (uploadErr) {
+          throw new Error(`Storage upload failed: ${uploadErr.message}`);
+        }
+
+        // Generate signed URL (1-year duration = 31536000 seconds)
+        const { data: signData, error: signErr } = await supabase.storage
+          .from('employee-documents')
+          .createSignedUrl(storagePath, 31536000);
+
+        if (signErr || !signData?.signedUrl) {
+          throw new Error(`Failed to generate signed photo URL: ${signErr?.message || 'Unknown error'}`);
+        }
+
+        persistentAvatarUrl = signData.signedUrl;
+
+        // Persist database reference (throws if DB update was blocked/failed)
+        if (updateOwnAvatar) {
+          await updateOwnAvatar(empDbId, persistentAvatarUrl);
+        }
+
+        // Safely remove old avatar from storage if it belonged to employee-documents
+        try {
+          if (oldAvatarUrl && oldAvatarUrl.includes('employee-documents') && oldAvatarUrl.includes('/avatars/')) {
+            const match = oldAvatarUrl.match(/employee-documents\/([^?]+)/);
+            if (match && match[1]) {
+              const oldPath = decodeURIComponent(match[1]);
+              if (oldPath !== storagePath) {
+                await supabase.storage.from('employee-documents').remove([oldPath]);
+              }
+            }
+          }
+        } catch (cleanupErr) {
+          console.warn('[MyProfile] Old avatar cleanup skipped or not permitted:', cleanupErr);
+        }
+      } else {
+        // Offline / demo fallback
+        persistentAvatarUrl = avatarPreviewUrl;
+        if (updateOwnAvatar) {
+          await updateOwnAvatar(empDbId, persistentAvatarUrl);
+        }
+      }
+
+      // Update AuthContext user state immediately after successful persistence
+      if (updateUserAvatar) {
+        updateUserAvatar(persistentAvatarUrl);
+      }
+      if (refreshProfile) {
+        await refreshProfile();
+        // Re-assert fresh avatar to prevent any race condition with stale database reads
+        if (updateUserAvatar) {
+          updateUserAvatar(persistentAvatarUrl);
+        }
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Profile Photo Updated',
+        message: 'Your new profile picture has been updated successfully.'
+      });
+
+      handleCancelAvatarModal();
+    } catch (err) {
+      console.error('[MyProfile] Error uploading avatar:', err);
+      const userMessage = 'Profile photo upload failed to save. Please try again.';
+      setAvatarUploadError(userMessage);
+      addToast({
+        type: 'error',
+        title: 'Upload Failed',
+        message: userMessage
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // Form states for profile change request
   const ALLOWED_FIELDS = [
     { id: 'phone', label: 'Contact Phone Number', placeholder: '+1 (555) 000-0000', getCurrent: (emp) => emp.phone },
     { id: 'location', label: 'Work Location / Office', placeholder: 'e.g. New York, NY (Headquarters)', getCurrent: (emp) => emp.location },
     { id: 'name', label: 'Full Legal Name (Requires Govt ID / Gazette)', placeholder: 'e.g. Tarumani Bharath Raj', getCurrent: (emp) => emp.name },
-    { id: 'emergencyName', label: 'Emergency Contact - Name', placeholder: 'e.g. Srinivas Raj', getCurrent: (emp) => emp.emergencyContact?.name || '' },
-    { id: 'emergencyRelation', label: 'Emergency Contact - Relationship', placeholder: 'e.g. Spouse / Parent / Sibling', getCurrent: (emp) => emp.emergencyContact?.relation || '' },
-    { id: 'emergencyPhone', label: 'Emergency Contact - Phone', placeholder: 'e.g. +1 (555) 345-6789', getCurrent: (emp) => emp.emergencyContact?.phone || '' },
+    { id: 'emergencyName', label: 'Emergency Contact - Name', placeholder: 'e.g. Srinivas Raj', getCurrent: (emp) => emergencyContact?.name || emp.emergencyContact?.name || '' },
+    { id: 'emergencyRelation', label: 'Emergency Contact - Relationship', placeholder: 'e.g. Spouse / Parent / Sibling', getCurrent: (emp) => emergencyContact?.relationship || emergencyContact?.relation || emp.emergencyContact?.relation || '' },
+    { id: 'emergencyPhone', label: 'Emergency Contact - Phone', placeholder: 'e.g. +1 (555) 345-6789', getCurrent: (emp) => emergencyContact?.phone || emp.emergencyContact?.phone || '' },
     { id: 'skills', label: 'Skills & Certifications (Comma-separated)', placeholder: 'e.g. React 19, TypeScript, AWS Solutions Architect', getCurrent: (emp) => emp.skills?.join(', ') || '' }
   ];
 
@@ -72,7 +317,9 @@ export const MyProfile = () => {
     }
   };
 
-  const handleSubmitRequest = (e) => {
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  const handleSubmitRequest = async (e) => {
     e.preventDefault();
     if (!requestedValue.trim() || !reason.trim()) {
       addToast({
@@ -83,36 +330,53 @@ export const MyProfile = () => {
       return;
     }
 
-    submitProfileRequest({
-      employeeId: liveEmployee.id,
-      employeeName: liveEmployee.name,
-      department: liveEmployee.department,
-      avatar: liveEmployee.avatar,
-      field: selectedFieldId,
-      fieldLabel: currentFieldConfig.label,
-      currentValue: currentValue || '(Not Specified)',
-      requestedValue: requestedValue.trim(),
-      reason: reason.trim(),
-      documentName: attachedFileName || 'Supporting_Document_Verified.pdf',
-      documentSize: '320 KB'
-    });
+    setIsSubmittingRequest(true);
+    try {
+      await submitProfileRequest({
+        employeeId: liveEmployee?.id,
+        employeeName: liveEmployee?.name,
+        department: liveEmployee?.department,
+        avatar: liveEmployee?.avatar,
+        field: selectedFieldId,
+        fieldLabel: currentFieldConfig.label,
+        currentValue: currentValue || '(Not Specified)',
+        requestedValue: requestedValue.trim(),
+        reason: reason.trim(),
+        documentName: attachedFileName || null,
+        documentSize: attachedFileName ? '320 KB' : null
+      });
 
-    setIsModalOpen(false);
-    setRequestedValue('');
-    setReason('');
-    setAttachedFileName('');
-    setActiveTab('requests');
+      setIsModalOpen(false);
+      setRequestedValue('');
+      setReason('');
+      setAttachedFileName('');
+      setActiveTab('requests');
 
-    addToast({
-      type: 'success',
-      title: 'Change Request Submitted',
-      message: 'Your profile amendment has been forwarded to People Operations for review.'
-    });
+      addToast({
+        type: 'success',
+        title: 'Change Request Submitted',
+        message: 'Your profile amendment has been forwarded to People Operations for review.'
+      });
+    } catch (err) {
+      console.error('[MyProfile] Error submitting profile change request:', err);
+      addToast({
+        type: 'error',
+        title: 'Submission Failed',
+        message: err.message || 'Failed to submit profile change request. Please try again.'
+      });
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   };
 
-  // Filter requests submitted by this employee
-  const myRequests = profileRequests.filter((r) => r.employeeId === liveEmployee.id);
-  const pendingRequestsCount = myRequests.filter((r) => r.status === 'Pending').length;
+  // Filter requests submitted by this employee (supports both display ID like DGX003 and UUID user.dbId)
+  const myRequests = profileRequests.filter(
+    (r) =>
+      r.employeeId === liveEmployee?.id ||
+      r.employeeUuid === liveEmployee?.dbId ||
+      r.employeeId === liveEmployee?.dbId
+  );
+  const pendingRequestsCount = myRequests.filter((r) => r.status?.toLowerCase() === 'pending').length;
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -132,11 +396,32 @@ export const MyProfile = () => {
         <div className="p-6 sm:p-8 pt-0 relative">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-14 mb-4">
             <div className="flex items-end gap-4">
-              <img
-                src={liveEmployee?.avatar}
-                alt={liveEmployee?.name}
-                className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover ring-4 ring-white shadow-md bg-white"
-              />
+              <div className="relative group/avatar inline-block flex-shrink-0">
+                <img
+                  src={liveEmployee?.avatar}
+                  alt={liveEmployee?.name}
+                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover ring-4 ring-white shadow-md bg-white transition-opacity duration-200"
+                />
+                <button
+                  type="button"
+                  onClick={handleOpenAvatarPicker}
+                  title="Change profile photo"
+                  aria-label="Change profile photo"
+                  id="btn-change-profile-photo"
+                  className="absolute -bottom-1 -right-1 p-2 bg-digix-600 hover:bg-digix-700 active:scale-95 text-white rounded-xl shadow-md ring-2 ring-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-digix-500 cursor-pointer flex items-center justify-center"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  id="avatar-file-input"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
+                  className="hidden"
+                  onChange={handleAvatarFileSelected}
+                  aria-label="Upload profile photo"
+                />
+              </div>
               <div className="mb-2">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
@@ -189,7 +474,12 @@ export const MyProfile = () => {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id);
+              if (tab.id === 'requests' && typeof fetchProfileRequests === 'function') {
+                fetchProfileRequests();
+              }
+            }}
             className={`pb-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === tab.id
                 ? 'border-digix-500 text-digix-600'
@@ -235,26 +525,37 @@ export const MyProfile = () => {
           </Card>
 
           <Card title="Emergency Contact">
-            <div className="space-y-3.5 text-xs">
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Primary Contact</span>
-                <span className="font-medium text-slate-900">
-                  {liveEmployee?.emergencyContact?.name || 'Srinivas Raj'}
-                </span>
+            {isLoadingEmergencyContact ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                <div className="w-5 h-5 border-2 border-digix-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <span>Loading emergency contact...</span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Relationship</span>
-                <span className="font-medium text-slate-900">
-                  {liveEmployee?.emergencyContact?.relation || 'Spouse'}
-                </span>
+            ) : emergencyContact ? (
+              <div className="space-y-3.5 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Primary Contact</span>
+                  <span className="font-medium text-slate-900">{emergencyContact.name}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Relationship</span>
+                  <span className="font-medium text-slate-900">
+                    {emergencyContact.relationship || emergencyContact.relation || 'Contact'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-slate-500">Emergency Phone</span>
+                  <span className="font-medium text-slate-900">{emergencyContact.phone}</span>
+                </div>
               </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-slate-500">Emergency Phone</span>
-                <span className="font-medium text-slate-900">
-                  {liveEmployee?.emergencyContact?.phone || '+1 (555) 345-6789'}
-                </span>
+            ) : (
+              <div className="py-6 text-center text-xs text-slate-500">
+                <AlertCircle className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+                <p className="font-semibold text-slate-700">No emergency contact added</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  No emergency contact is on file for your employee record.
+                </p>
               </div>
-            </div>
+            )}
           </Card>
         </div>
       )}
@@ -401,7 +702,12 @@ export const MyProfile = () => {
             </Button>
           </div>
 
-          {myRequests.length === 0 ? (
+          {isLoadingProfileRequests && myRequests.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
+              <div className="w-5 h-5 border-2 border-digix-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <span>Loading change requests from database...</span>
+            </div>
+          ) : myRequests.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-6">
               <Clock className="w-10 h-10 text-slate-300 mx-auto mb-2" />
               <p className="text-sm font-semibold text-slate-700">No change requests submitted</p>
@@ -412,9 +718,9 @@ export const MyProfile = () => {
           ) : (
             <div className="space-y-3">
               {myRequests.map((req) => {
-                const isApproved = req.status === 'Approved';
-                const isRejected = req.status === 'Rejected';
-                const isPending = req.status === 'Pending';
+                const isApproved = req.status?.toLowerCase() === 'approved';
+                const isRejected = req.status?.toLowerCase() === 'rejected';
+                const isPending = req.status?.toLowerCase() === 'pending';
 
                 return (
                   <div
@@ -425,7 +731,7 @@ export const MyProfile = () => {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
                       <div className="flex items-center gap-2.5">
                         <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-                          {req.id}
+                          {req.id?.length > 15 ? `PCR-${req.id.slice(0, 8).toUpperCase()}` : req.id}
                         </span>
                         <h4 className="text-sm font-bold text-slate-900">
                           {req.fieldLabel}
@@ -611,11 +917,98 @@ export const MyProfile = () => {
             <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={isSubmittingRequest}
+            >
               Submit Request to HR
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Avatar Preview & Upload Confirmation Modal */}
+      <Modal
+        isOpen={isAvatarModalOpen}
+        onClose={isUploadingAvatar ? () => {} : handleCancelAvatarModal}
+        title="Change Profile Photo"
+        subtitle="Preview your updated profile picture before applying changes."
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelAvatarModal}
+              disabled={isUploadingAvatar}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              id="btn-save-avatar"
+              onClick={handleSaveAvatar}
+              isLoading={isUploadingAvatar}
+              leftIcon={!isUploadingAvatar && <Upload className="w-4 h-4" />}
+            >
+              Save & Upload
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 py-1">
+          {/* Avatar Preview Display */}
+          <div className="flex flex-col items-center justify-center p-5 bg-slate-50 rounded-xl border border-slate-100">
+            <div className="relative w-32 h-32 rounded-2xl overflow-hidden ring-4 ring-white shadow-lg bg-slate-200 mb-3 flex items-center justify-center">
+              {avatarPreviewUrl ? (
+                <img
+                  src={avatarPreviewUrl}
+                  alt="Avatar preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User className="w-12 h-12 text-slate-400" />
+              )}
+            </div>
+
+            {avatarFile && (
+              <div className="text-center">
+                <p className="text-xs font-semibold text-slate-800 truncate max-w-[240px]">
+                  {avatarFile.name}
+                </p>
+                <div className="flex items-center justify-center gap-2 mt-1 text-[11px] text-slate-500">
+                  <span>{(avatarFile.size / 1024).toFixed(0)} KB</span>
+                  <span>•</span>
+                  <span className="uppercase font-medium text-digix-600 bg-digix-50 px-1.5 py-0.5 rounded">
+                    {avatarFile.name.split('.').pop()}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Validation / Upload Error Banner */}
+          {avatarUploadError && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+              <span>{avatarUploadError}</span>
+            </div>
+          )}
+
+          {/* Enterprise Policy Guidance Note */}
+          <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-lg text-[11px] text-blue-700 flex items-start gap-2">
+            <Shield className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">No HR Approval Required</p>
+              <p className="text-blue-600/90 mt-0.5">
+                Profile photos update immediately. Core employment details (Name, ID, Department, Band) remain protected and require an official change request.
+              </p>
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );

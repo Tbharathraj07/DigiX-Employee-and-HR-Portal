@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/common/Button';
@@ -9,16 +10,18 @@ import { SearchInput } from '../../components/common/SearchInput';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
-import { UserPlus, Download, Eye, Mail, Building } from 'lucide-react';
+import { UserPlus, Download, Eye, RotateCw, AlertCircle } from 'lucide-react';
 
 export const EmployeesList = () => {
-  const { employees, addEmployee } = usePortalData();
+  const { isSupabaseAuth } = useAuth();
+  const { employees, addEmployee, isLoadingEmployees, employeesError, fetchEmployees } = usePortalData();
   const { addToast } = useToast();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // New employee state
   const [name, setName] = useState('');
@@ -29,30 +32,41 @@ export const EmployeesList = () => {
   const [salary, setSalary] = useState('$130,000');
   const [band, setBand] = useState('L5 - Senior');
 
-  const handleCreateEmployee = (e) => {
+  const handleCreateEmployee = async (e) => {
     e.preventDefault();
     if (!name || !email) return;
 
-    addEmployee({
-      name,
-      email,
-      roleTitle,
-      department,
-      location,
-      salary,
-      band,
-      role: 'employee'
-    });
+    setIsSubmitting(true);
+    try {
+      await addEmployee({
+        name,
+        email,
+        roleTitle,
+        department,
+        location,
+        salary,
+        band,
+        role: 'employee'
+      });
 
-    setIsModalOpen(false);
-    setName('');
-    setEmail('');
-    setRoleTitle('');
-    addToast({
-      type: 'success',
-      title: 'Employee Added',
-      message: `${name} has been enrolled in the DigiX HR Directory.`
-    });
+      setIsModalOpen(false);
+      setName('');
+      setEmail('');
+      setRoleTitle('');
+      addToast({
+        type: 'success',
+        title: 'Employee Added',
+        message: `${name} has been enrolled in the DigiX HR Directory.`
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Failed to Add Employee',
+        message: err.message || 'Error creating employee record.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const departments = ['All', 'Engineering', 'Product Design', 'Human Resources', 'Data & AI', 'Marketing', 'IT & Security'];
@@ -140,6 +154,18 @@ export const EmployeesList = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {isSupabaseAuth && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<RotateCw className={`w-3.5 h-3.5 ${isLoadingEmployees ? 'animate-spin' : ''}`} />}
+              onClick={fetchEmployees}
+              disabled={isLoadingEmployees}
+            >
+              Refresh
+            </Button>
+          )}
+
           <Button
             size="sm"
             variant="outline"
@@ -164,6 +190,18 @@ export const EmployeesList = () => {
           </Button>
         </div>
       </div>
+
+      {employeesError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center justify-between text-xs text-rose-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0" />
+            <span>{employeesError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={fetchEmployees}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-subtle">
@@ -193,7 +231,12 @@ export const EmployeesList = () => {
       </div>
 
       {/* Table */}
-      <Table columns={columns} data={filtered} />
+      <Table
+        columns={columns}
+        data={filtered}
+        isLoading={isLoadingEmployees}
+        emptyMessage="No employees found in directory."
+      />
 
       {/* Add Employee Modal */}
       <Modal
@@ -260,11 +303,11 @@ export const EmployeesList = () => {
           />
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
+            <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
-              Save Employee
+            <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : 'Save Employee'}
             </Button>
           </div>
         </form>

@@ -44,7 +44,7 @@ const DEPARTMENT_OPTIONS = [
 ];
 
 export const HRTraining = () => {
-  const { trainings, createTraining, updateTraining, deleteTraining, joinTraining, employees } = usePortalData();
+  const { trainings, createTraining, updateTraining, deleteTraining, joinTraining, employees, isLoadingTrainings, trainingError } = usePortalData();
   const { user } = useAuth();
   const { addToast } = useToast();
 
@@ -132,82 +132,115 @@ export const HRTraining = () => {
   };
 
   // Handle Create Submit
-  const handleCreateSubmit = (e) => {
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title.trim()) return;
 
-    const createdBy = user?.name ? `${user.name}, ${user.roleTitle || 'HR Manager'}` : 'Priyanka, HR Manager';
-    const newCourse = createTraining(formData, createdBy);
+    try {
+      const createdBy = user?.name ? `${user.name}, ${user.roleTitle || 'HR Manager'}` : 'Priyanka, HR Manager';
+      const newCourse = await createTraining(formData, createdBy);
 
-    setIsCreateOpen(false);
-    addToast({
-      type: 'success',
-      title: 'Training Module Published',
-      message: `"${newCourse.title}" is now available and assigned in the portal.`
-    });
+      setIsCreateOpen(false);
+      addToast({
+        type: 'success',
+        title: 'Training Module Published',
+        message: `"${newCourse?.title || formData.title}" is now available and assigned in the portal.`
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Creation Failed',
+        message: err.message || 'Unable to publish training program.'
+      });
+    }
   };
 
   // Handle Edit Submit
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!selectedTraining || !formData.title.trim()) return;
 
-    updateTraining(selectedTraining.id, formData);
-    setIsEditOpen(false);
-    setSelectedTraining(null);
-    addToast({
-      type: 'success',
-      title: 'Training Updated',
-      message: `Modifications to "${formData.title}" have been saved.`
-    });
+    try {
+      await updateTraining(selectedTraining.id, formData);
+      setIsEditOpen(false);
+      setSelectedTraining(null);
+      addToast({
+        type: 'success',
+        title: 'Training Updated',
+        message: `Modifications to "${formData.title}" have been saved.`
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: err.message || 'Unable to update training program.'
+      });
+    }
   };
 
   // Handle Delete Confirm
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!selectedTraining) return;
-    deleteTraining(selectedTraining.id);
-    setIsDeleteOpen(false);
-    setSelectedTraining(null);
-    addToast({
-      type: 'info',
-      title: 'Training Program Removed',
-      message: 'The training curriculum has been successfully archived.'
-    });
+    try {
+      await deleteTraining(selectedTraining.id);
+      setIsDeleteOpen(false);
+      setSelectedTraining(null);
+      addToast({
+        type: 'info',
+        title: 'Training Program Removed',
+        message: 'The training curriculum has been successfully archived.'
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Deletion Failed',
+        message: err.message || 'Unable to remove training program.'
+      });
+    }
   };
 
   // Handle Manual Enrollment from Details Modal
-  const handleManualEnroll = () => {
+  const handleManualEnroll = async () => {
     if (!selectedTraining || !employeeToEnroll) return;
     const targetEmp = employees.find((e) => e.id === employeeToEnroll);
     if (!targetEmp) return;
 
-    joinTraining(selectedTraining.id, targetEmp);
-    setEmployeeToEnroll('');
+    try {
+      await joinTraining(selectedTraining.id, targetEmp);
+      setEmployeeToEnroll('');
 
-    // Update local selectedTraining view
-    setSelectedTraining((prev) => {
-      const already = prev.enrolledEmployees?.some((e) => (typeof e === 'string' ? e === targetEmp.id : e.id === targetEmp.id));
-      if (already) return prev;
-      return {
-        ...prev,
-        enrolledEmployees: [
-          ...(prev.enrolledEmployees || []),
-          {
-            id: targetEmp.id,
-            name: targetEmp.name,
-            enrolledDate: new Date().toISOString().split('T')[0],
-            progress: 0,
-            completedDate: null
-          }
-        ]
-      };
-    });
+      // Update local selectedTraining view
+      setSelectedTraining((prev) => {
+        const already = prev.enrolledEmployees?.some((e) => (typeof e === 'string' ? e === targetEmp.id : e.id === targetEmp.id));
+        if (already) return prev;
+        return {
+          ...prev,
+          enrolledEmployees: [
+            ...(prev.enrolledEmployees || []),
+            {
+              id: targetEmp.id,
+              name: targetEmp.name,
+              enrolledDate: new Date().toISOString().split('T')[0],
+              progress: 0,
+              completedDate: null,
+              status: 'in_progress'
+            }
+          ]
+        };
+      });
 
-    addToast({
-      type: 'success',
-      title: 'Employee Enrolled',
-      message: `${targetEmp.name} has been enrolled in ${selectedTraining.title}.`
-    });
+      addToast({
+        type: 'success',
+        title: 'Employee Enrolled',
+        message: `${targetEmp.name} has been enrolled in ${selectedTraining.title}.`
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Enrollment Failed',
+        message: err.message || 'Unable to enroll employee into training.'
+      });
+    }
   };
 
   // Specific employee toggle in Create / Edit
@@ -362,6 +395,19 @@ export const HRTraining = () => {
           Create Training Program
         </Button>
       </div>
+
+      {trainingError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>Notice: {trainingError}</span>
+        </div>
+      )}
+
+      {isLoadingTrainings && (
+        <div className="text-center py-2 text-xs text-slate-400">
+          Syncing corporate training programs with Supabase...
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

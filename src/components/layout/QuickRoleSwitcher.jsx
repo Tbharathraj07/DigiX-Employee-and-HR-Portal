@@ -6,10 +6,13 @@ import { useToast } from '../../context/ToastContext';
 import { UserCheck, ShieldCheck, Users } from 'lucide-react';
 
 export const QuickRoleSwitcher = () => {
-  const { role, switchRole } = useAuth();
+  const { role, switchRole, isSupabaseAuth } = useAuth();
   const { recordLoginAttendance } = usePortalData();
   const navigate = useNavigate();
   const { addToast } = useToast();
+
+  // Security: Do not render demo role switcher for real authenticated Supabase accounts
+  if (isSupabaseAuth) return null;
 
   const roles = [
     { key: 'employee', label: 'Employee', icon: UserCheck, route: '/employee/dashboard', color: 'text-blue-700 bg-blue-50 border-blue-200' },

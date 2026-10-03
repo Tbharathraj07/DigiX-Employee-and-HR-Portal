@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 export const TrainingPage = () => {
-  const { trainings, joinTraining, updateTrainingProgress } = usePortalData();
+  const { trainings, joinTraining, updateTrainingProgress, isLoadingTrainings, trainingError } = usePortalData();
   const { user } = useAuth();
   const { addToast } = useToast();
 
@@ -84,31 +84,47 @@ export const TrainingPage = () => {
     .reduce((acc, c) => acc + (parseFloat(c.duration) || 0), 0);
 
   // Actions
-  const handleJoinTraining = (course) => {
-    joinTraining(course.id, { id: currentUserId, name: currentUserName });
-    addToast({
-      type: 'success',
-      title: 'Enrolled in Training',
-      message: `Successfully enrolled in "${course.title}". Course added to My Training.`
-    });
-    // Optional auto-switch or stay
-    if (isDetailsOpen) setIsDetailsOpen(false);
-  };
-
-  const handleResumeLearning = (course) => {
-    const currentProg = getMyProgress(course);
-    const newProg = updateTrainingProgress(course.id, currentUserId, 25);
-    if (newProg === 100) {
+  const handleJoinTraining = async (course) => {
+    try {
+      await joinTraining(course.id, { id: currentUserId, name: currentUserName });
       addToast({
         type: 'success',
-        title: 'Curriculum Completed! 🎉',
-        message: `Congratulations! You have completed "${course.title}". Your verified certificate is ready.`
+        title: 'Enrolled in Training',
+        message: `Successfully enrolled in "${course.title}". Course added to My Training.`
       });
-    } else {
+      if (isDetailsOpen) setIsDetailsOpen(false);
+      setActiveTab('my_training');
+    } catch (err) {
       addToast({
-        type: 'info',
-        title: 'Progress Saved',
-        message: `Advanced "${course.title}" from ${currentProg}% to ${newProg}%.`
+        type: 'error',
+        title: 'Enrollment Failed',
+        message: err.message || 'Unable to enroll in course. Please try again.'
+      });
+    }
+  };
+
+  const handleResumeLearning = async (course) => {
+    try {
+      const currentProg = getMyProgress(course);
+      const newProg = await updateTrainingProgress(course.id, currentUserId, 25);
+      if (newProg === 100) {
+        addToast({
+          type: 'success',
+          title: 'Curriculum Completed! 🎉',
+          message: `Congratulations! You have completed "${course.title}". Your verified certificate is ready.`
+        });
+      } else {
+        addToast({
+          type: 'info',
+          title: 'Progress Saved',
+          message: `Advanced "${course.title}" from ${currentProg}% to ${newProg}%.`
+        });
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Progress Update Failed',
+        message: err.message || 'Unable to advance learning progress.'
       });
     }
   };
@@ -131,12 +147,27 @@ export const TrainingPage = () => {
   return (
     <div className="space-y-6">
       {/* Top Title */}
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">Learning & Certifications</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Corporate compliance curriculums, technical upskilling, and verified DigiX professional credentials.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Learning & Certifications</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Corporate compliance curriculums, technical upskilling, and verified DigiX professional credentials.
+          </p>
+        </div>
+        {isLoadingTrainings && (
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-medium self-start sm:self-center">
+            <div className="w-3 h-3 border-2 border-digix-500 border-t-transparent rounded-full animate-spin" />
+            <span>Syncing curriculums...</span>
+          </div>
+        )}
       </div>
+
+      {trainingError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>Notice: {trainingError}</span>
+        </div>
+      )}
 
       {/* Top Learning Stats Banner */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

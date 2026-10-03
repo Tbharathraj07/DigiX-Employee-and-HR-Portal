@@ -1186,3 +1186,270 @@ export const INITIAL_PROFILE_REQUESTS = [
     hrComment: "Please provide a notarized government ID or SSN card copy rather than a cropped photo."
   }
 ];
+
+export const INITIAL_HELPDESK_TICKETS = [
+  {
+    id: "HD-1001",
+    ticketNumber: "HD-2026-1001",
+    employeeId: "DGX003",
+    employeeName: "Tarumani Bharath Raj",
+    department: "Technology",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    subject: "Form 16 Tax Certificate Clarification & Revision",
+    category: "Payroll & Compensation",
+    priority: "high",
+    status: "in_progress",
+    description: "I noticed a minor discrepancy in the HRA exemption calculation on Part B of my Form 16 statement for Q4. Could HR please verify the submitted rent receipts?",
+    assignedTo: "Priyanka",
+    assignedToId: "EMP-002",
+    initialAttachmentUrl: null,
+    initialAttachmentName: "Rent_Receipts_Summary.pdf",
+    initialAttachmentSize: "420 KB",
+    resolvedAt: null,
+    closedAt: null,
+    createdAt: "2026-09-29T10:15:00Z",
+    updatedAt: "2026-09-30T14:20:00Z"
+  },
+  {
+    id: "HD-1002",
+    ticketNumber: "HD-2026-1002",
+    employeeId: "DGX003",
+    employeeName: "Tarumani Bharath Raj",
+    department: "Technology",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    subject: "Dependent Health Insurance Card Dispatch",
+    category: "Benefits & Health",
+    priority: "medium",
+    status: "waiting_for_employee",
+    description: "My parents' mediclaim cards have not arrived yet via courier. Can you provide the tracking number?",
+    assignedTo: "Priyanka",
+    assignedToId: "EMP-002",
+    initialAttachmentUrl: null,
+    initialAttachmentName: null,
+    initialAttachmentSize: null,
+    resolvedAt: null,
+    closedAt: null,
+    createdAt: "2026-10-01T09:00:00Z",
+    updatedAt: "2026-10-02T11:30:00Z"
+  },
+  {
+    id: "HD-1003",
+    ticketNumber: "HD-2026-1003",
+    employeeId: "EMP-1088",
+    employeeName: "Priya Sharma",
+    department: "Product Design",
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
+    subject: "Relocation Expense Reimbursement Query",
+    category: "Payroll & Compensation",
+    priority: "low",
+    status: "open",
+    description: "Regarding my transfer to the SF design team, what is the maximum claimable allowance for packers and movers?",
+    assignedTo: null,
+    assignedToId: null,
+    initialAttachmentUrl: null,
+    initialAttachmentName: null,
+    initialAttachmentSize: null,
+    resolvedAt: null,
+    closedAt: null,
+    createdAt: "2026-10-02T16:45:00Z",
+    updatedAt: "2026-10-02T16:45:00Z"
+  },
+  {
+    id: "HD-1004",
+    ticketNumber: "HD-2026-1004",
+    employeeId: "EMP-1095",
+    employeeName: "Ethan Chen",
+    department: "Technology",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+    subject: "AWS Cloud Architect Certification Reimbursement",
+    category: "Performance & Appraisals",
+    priority: "medium",
+    status: "resolved",
+    description: "I have passed the AWS Certified Solutions Architect Professional exam. Submitting receipt for 100% course reimbursement.",
+    assignedTo: "Priyanka",
+    assignedToId: "EMP-002",
+    initialAttachmentUrl: null,
+    initialAttachmentName: "AWS_Exam_Score_Receipt.pdf",
+    initialAttachmentSize: "680 KB",
+    resolvedAt: "2026-10-01T15:00:00Z",
+    closedAt: null,
+    createdAt: "2026-09-28T11:00:00Z",
+    updatedAt: "2026-10-01T15:00:00Z"
+  }
+];
+
+export const INITIAL_HELPDESK_MESSAGES = [
+  {
+    id: "MSG-101",
+    ticketId: "HD-1001",
+    senderId: "DGX003",
+    senderName: "Tarumani Bharath Raj",
+    senderRole: "employee",
+    message: "Hello HR team, I submitted my rent receipts for Q4 but the HRA tax benefit seems lower than expected. Please cross check the rent receipts.",
+    attachmentUrl: null,
+    attachmentName: "Rent_Receipts_Summary.pdf",
+    attachmentSize: "420 KB",
+    createdAt: "2026-09-29T10:15:00Z"
+  },
+  {
+    id: "MSG-102",
+    ticketId: "HD-1001",
+    senderId: "EMP-002",
+    senderName: "Priyanka (HR People Operations)",
+    senderRole: "hr_manager",
+    message: "Hi Tarumani, thank you for flagging this. Our payroll vendor flagged that the landlord PAN declaration was missing for the last month. Could you upload the signed PAN declaration?",
+    attachmentUrl: null,
+    attachmentName: null,
+    attachmentSize: null,
+    createdAt: "2026-09-30T14:20:00Z"
+  },
+  {
+    id: "MSG-103",
+    ticketId: "HD-1002",
+    senderId: "DGX003",
+    senderName: "Tarumani Bharath Raj",
+    senderRole: "employee",
+    message: "Hi Priyanka, my parents' medical insurance cards have not arrived at my residential address. Could you check with the insurance broker?",
+    attachmentUrl: null,
+    attachmentName: null,
+    attachmentSize: null,
+    createdAt: "2026-10-01T09:00:00Z"
+  },
+  {
+    id: "MSG-104",
+    ticketId: "HD-1002",
+    senderId: "EMP-002",
+    senderName: "Priyanka (HR People Operations)",
+    senderRole: "hr_manager",
+    message: "Hi Tarumani, the courier was returned due to an incomplete door number. Could you please confirm your current flat and building number in your reply?",
+    attachmentUrl: null,
+    attachmentName: null,
+    attachmentSize: null,
+    createdAt: "2026-10-02T11:30:00Z"
+  }
+];
+
+export const INITIAL_HOLIDAYS = [
+  {
+    id: "HOL-001",
+    name: "Republic Day",
+    date: "2026-01-26",
+    description: "National Holiday celebrating the Constitution of India",
+    holidayType: "national",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-002",
+    name: "Maha Shivratri",
+    date: "2026-02-17",
+    description: "Gazetted public holiday",
+    holidayType: "public",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-003",
+    name: "Holi",
+    date: "2026-03-04",
+    description: "Festival of Colors - Public holiday",
+    holidayType: "public",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-004",
+    name: "Good Friday",
+    date: "2026-04-03",
+    description: "Public Holiday observed across all centers",
+    holidayType: "public",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-005",
+    name: "Eid-ul-Fitr",
+    date: "2026-03-21",
+    description: "Public holiday",
+    holidayType: "public",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-006",
+    name: "Independence Day",
+    date: "2026-08-15",
+    description: "National Holiday celebrating Independence Day",
+    holidayType: "national",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-007",
+    name: "Gandhi Jayanti",
+    date: "2026-10-02",
+    description: "National Holiday in honor of Mahatma Gandhi",
+    holidayType: "national",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-008",
+    name: "Dussehra (Vijayadashami)",
+    date: "2026-10-20",
+    description: "Public holiday for Vijayadashami celebration",
+    holidayType: "public",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-009",
+    name: "Diwali (Deepavali)",
+    date: "2026-11-08",
+    description: "Festival of Lights - Public holiday",
+    holidayType: "national",
+    location: "All Locations",
+    year: 2026
+  },
+  {
+    id: "HOL-010",
+    name: "Christmas Day",
+    date: "2026-12-25",
+    description: "Celebration of Christmas - Public holiday",
+    holidayType: "public",
+    location: "All Locations",
+    year: 2026
+  }
+];
+
+export const INITIAL_CALENDAR_EVENTS = [
+  {
+    id: "EVT-101",
+    title: "DigiX Q4 Annual Town Hall",
+    description: "Quarterly company-wide executive update and roadmap presentation by Leadership.",
+    eventDate: "2026-10-16",
+    startTime: "10:00",
+    endTime: "11:30",
+    eventType: "town_hall",
+    targetAudience: "all",
+    targetDepartment: null,
+    targetEmployeeId: null,
+    location: "Main Auditorium & Virtual Zoom",
+    createdBy: "Priyanka, HR Manager"
+  },
+  {
+    id: "EVT-102",
+    title: "Engineering Tech Sprint Review",
+    description: "Sprint retrospective and Q4 architecture showcase for Web Platform.",
+    eventDate: "2026-10-28",
+    startTime: "14:00",
+    endTime: "15:30",
+    eventType: "meeting",
+    targetAudience: "department",
+    targetDepartment: "Technology",
+    targetEmployeeId: null,
+    location: "Tech Hub Room 3B",
+    createdBy: "Priyanka, HR Manager"
+  }
+];
+

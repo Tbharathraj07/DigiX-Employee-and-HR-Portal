@@ -1,11 +1,10 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Menu, Search } from 'lucide-react';
-import { QuickRoleSwitcher } from './QuickRoleSwitcher';
+import { Menu, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NotificationsMenu } from './NotificationsMenu';
 import { ProfileMenu } from './ProfileMenu';
 
-export const Header = ({ onOpenSidebar, onOpenSearch }) => {
+export const Header = ({ onOpenSidebar, onOpenSearch, isCollapsed, onToggleCollapse }) => {
   const location = useLocation();
 
   // Compute clean breadcrumb
@@ -23,8 +22,9 @@ export const Header = ({ onOpenSidebar, onOpenSearch }) => {
 
   return (
     <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 px-3 sm:px-6 flex items-center justify-between transition-portal w-full">
-      {/* Left: Mobile Toggle & Page Title */}
+      {/* Left: Mobile Hamburger Drawer Trigger & Desktop Rail Toggle & Page Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Mobile Hamburger Drawer Trigger */}
         <button
           type="button"
           onClick={onOpenSidebar}
@@ -32,6 +32,21 @@ export const Header = ({ onOpenSidebar, onOpenSearch }) => {
           aria-label="Open Sidebar"
         >
           <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Desktop Sidebar Rail Toggle Button */}
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="hidden lg:flex p-2 -ml-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors items-center justify-center flex-shrink-0"
+          title={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isCollapsed ? (
+            <PanelLeftOpen className="w-5 h-5 text-slate-600" />
+          ) : (
+            <PanelLeftClose className="w-5 h-5 text-slate-600" />
+          )}
         </button>
 
         <div className="min-w-0">
@@ -64,7 +79,7 @@ export const Header = ({ onOpenSidebar, onOpenSearch }) => {
         </button>
       </div>
 
-      {/* Right Controls: Role Switcher, Notifications, User Menu */}
+      {/* Right Controls: Notifications, User Menu */}
       <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
         <button
           onClick={onOpenSearch}
@@ -73,9 +88,6 @@ export const Header = ({ onOpenSidebar, onOpenSearch }) => {
         >
           <Search className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
-
-        {/* 1-Click Role Switcher */}
-        <QuickRoleSwitcher />
 
         {/* Notifications Dropdown */}
         <NotificationsMenu />

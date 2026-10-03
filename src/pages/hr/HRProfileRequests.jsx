@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
@@ -18,75 +18,116 @@ import {
   Eye,
   ArrowRight,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 export const HRProfileRequests = () => {
-  const { user } = useAuth();
-  const { profileRequests, approveProfileRequest, rejectProfileRequest } = usePortalData();
+  const { user, isSupabaseAuth } = useAuth();
+  const { profileRequests, approveProfileRequest, rejectProfileRequest, fetchProfileRequests, isLoadingProfileRequests } = usePortalData();
   const { addToast } = useToast();
 
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [selectedReq, setSelectedReq] = useState(null);
   const [hrComment, setHrComment] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Automatically refresh requests when HR page opens
+  useEffect(() => {
+    if (isSupabaseAuth && typeof fetchProfileRequests === 'function') {
+      fetchProfileRequests();
+    }
+  }, [isSupabaseAuth, fetchProfileRequests]);
 
   const handleOpenReview = (req) => {
     setSelectedReq(req);
     setHrComment(req.hrComment || '');
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selectedReq) return;
-    approveProfileRequest(
-      selectedReq.id,
-      user?.name || 'Priyanka',
-      hrComment.trim() || 'Verified against submitted documentation and approved.'
-    );
-    addToast({
-      type: 'success',
-      title: 'Profile Request Approved',
-      message: `Updated ${selectedReq.fieldLabel} for ${selectedReq.employeeName}. Changes are now live.`
-    });
-    setSelectedReq(null);
-    setHrComment('');
+    setIsProcessing(true);
+    try {
+      await approveProfileRequest(
+        selectedReq.id,
+        user?.name || 'Priyanka',
+        hrComment.trim() || 'Verified against submitted documentation and approved.'
+      );
+      addToast({
+        type: 'success',
+        title: 'Profile Request Approved',
+        message: `Updated ${selectedReq.fieldLabel} for ${selectedReq.employeeName}. Changes are now live.`
+      });
+      setSelectedReq(null);
+      setHrComment('');
+    } catch (err) {
+      console.error('[HRProfileRequests] Error approving request:', err);
+      addToast({
+        type: 'error',
+        title: 'Approval Failed',
+        message: err.message || 'Failed to approve request. Please try again.'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selectedReq) return;
-    rejectProfileRequest(
-      selectedReq.id,
-      user?.name || 'Priyanka',
-      hrComment.trim() || 'Documentation insufficient or requires physical HR verification.'
-    );
-    addToast({
-      type: 'error',
-      title: 'Profile Request Rejected',
-      message: `Request for ${selectedReq.employeeName} has been declined.`
-    });
-    setSelectedReq(null);
-    setHrComment('');
+    setIsProcessing(true);
+    try {
+      await rejectProfileRequest(
+        selectedReq.id,
+        user?.name || 'Priyanka',
+        hrComment.trim() || 'Documentation insufficient or requires physical HR verification.'
+      );
+      addToast({
+        type: 'error',
+        title: 'Profile Request Rejected',
+        message: `Request for ${selectedReq.employeeName} has been declined.`
+      });
+      setSelectedReq(null);
+      setHrComment('');
+    } catch (err) {
+      console.error('[HRProfileRequests] Error rejecting request:', err);
+      addToast({
+        type: 'error',
+        title: 'Rejection Failed',
+        message: err.message || 'Failed to reject request. Please try again.'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const filtered = profileRequests.filter((r) => {
-    const matchesFilter = filter === 'All' || r.status === filter;
+    const rawStatus = (r.status || '').toLowerCase();
+    const targetFilter = filter.toLowerCase();
+    const matchesFilter = filter === 'All' || rawStatus === targetFilter;
+    const searchLower = search.toLowerCase();
     const matchesSearch =
-      r.employeeName.toLowerCase().includes(search.toLowerCase()) ||
-      r.employeeId.toLowerCase().includes(search.toLowerCase()) ||
-      r.fieldLabel.toLowerCase().includes(search.toLowerCase()) ||
-      r.id.toLowerCase().includes(search.toLowerCase());
+      (r.employeeName || '').toLowerCase().includes(searchLower) ||
+      (r.employeeId || '').toLowerCase().includes(searchLower) ||
+      (r.fieldLabel || '').toLowerCase().includes(searchLower) ||
+      (r.id || '').toLowerCase().includes(searchLower);
     return matchesFilter && matchesSearch;
   });
 
-  const pendingCount = profileRequests.filter((r) => r.status === 'Pending').length;
-  const approvedCount = profileRequests.filter((r) => r.status === 'Approved').length;
-  const rejectedCount = profileRequests.filter((r) => r.status === 'Rejected').length;
+  const pendingCount = profileRequests.filter((r) => (r.status || '').toLowerCase() === 'pending').length;
+  const approvedCount = profileRequests.filter((r) => (r.status || '').toLowerCase() === 'approved').length;
+  const rejectedCount = profileRequests.filter((r) => (r.status || '').toLowerCase() === 'rejected').length;
 
   const columns = [
     {
       header: 'Request ID',
       accessor: 'id',
-      cellClassName: 'font-mono text-xs font-bold text-slate-900'
+      cellClassName: 'font-mono text-xs font-bold text-slate-900',
+      render: (row) => (
+        <span title={row.id}>
+          {row.id?.length > 15 ? `PCR-${row.id.slice(0, 8).toUpperCase()}` : row.id}
+        </span>
+      )
     },
     {
       header: 'Employee',
@@ -220,25 +261,47 @@ export const HRProfileRequests = () => {
           className="w-full sm:w-80"
         />
 
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-          {['All', 'Pending', 'Approved', 'Rejected'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilter(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                filter === st
-                  ? 'bg-purple-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+          <div className="flex items-center gap-1.5">
+            {['All', 'Pending', 'Approved', 'Rejected'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setFilter(st)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                  filter === st
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+
+          {isSupabaseAuth && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchProfileRequests}
+              isLoading={isLoadingProfileRequests}
+              leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLoadingProfileRequests ? 'animate-spin' : ''}`} />}
+              className="py-1 px-2.5 text-xs ml-1"
             >
-              {st}
-            </button>
-          ))}
+              Refresh
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Table */}
-      <Table columns={columns} data={filtered} />
+      {isLoadingProfileRequests && filtered.length === 0 ? (
+        <div className="py-16 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
+          <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <span>Loading profile change requests from Supabase...</span>
+        </div>
+      ) : (
+        <Table columns={columns} data={filtered} />
+      )}
 
       {/* Review Modal */}
       {selectedReq && (
@@ -372,13 +435,14 @@ export const HRProfileRequests = () => {
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  <Button variant="outline" size="sm" onClick={() => setSelectedReq(null)}>
+                  <Button variant="outline" size="sm" onClick={() => setSelectedReq(null)} disabled={isProcessing}>
                     Close
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
                     onClick={handleReject}
+                    isLoading={isProcessing}
                     leftIcon={<XCircle className="w-4 h-4" />}
                   >
                     Reject Request
@@ -387,6 +451,7 @@ export const HRProfileRequests = () => {
                     variant="success"
                     size="sm"
                     onClick={handleApprove}
+                    isLoading={isProcessing}
                     leftIcon={<CheckCircle2 className="w-4 h-4" />}
                   >
                     Approve & Update Profile

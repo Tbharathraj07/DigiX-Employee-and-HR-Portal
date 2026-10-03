@@ -20,10 +20,23 @@ dist-ssr/
 
 # Local env files
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+.env*.local
+!.env.example
+
+# Private keys, certificates & credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.cert
+
+# Database backups & dumps
+*.dump
+*.sql.tar
+*.sql.gz
 
 # Editor & OS files
 .DS_Store
@@ -44,3 +57,7 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# Supabase
+supabase/.temp/
+

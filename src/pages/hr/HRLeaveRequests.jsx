@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
@@ -6,16 +7,24 @@ import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
-import { CheckCircle2, XCircle, Clock, Check, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Check, X, RotateCw } from 'lucide-react';
 
 export const HRLeaveRequests = () => {
-  const { leaveRequests, updateLeaveStatus } = usePortalData();
+  const { isSupabaseAuth } = useAuth();
+  const { leaveRequests, updateLeaveStatus, fetchLeaveRequests, isLoadingLeaves } = usePortalData();
   const { addToast } = useToast();
   const [filter, setFilter] = useState('All');
 
   const [selectedReq, setSelectedReq] = useState(null);
   const [modalType, setModalType] = useState(null); // 'approve' | 'reject'
   const [note, setNote] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (isSupabaseAuth && typeof fetchLeaveRequests === 'function') {
+      fetchLeaveRequests();
+    }
+  }, [isSupabaseAuth, fetchLeaveRequests]);
 
   const handleOpenAction = (req, type) => {
     setSelectedReq(req);
@@ -23,29 +32,48 @@ export const HRLeaveRequests = () => {
     setNote(type === 'approve' ? 'Approved by People Operations.' : 'Declined due to coverage constraints.');
   };
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
     if (!selectedReq) return;
+    setIsProcessing(true);
     const newStatus = modalType === 'approve' ? 'Approved' : 'Rejected';
-    updateLeaveStatus(selectedReq.id, newStatus, note);
 
-    addToast({
-      type: modalType === 'approve' ? 'success' : 'error',
-      title: `Leave ${newStatus}`,
-      message: `${selectedReq.employeeName}'s ${selectedReq.type} has been updated.`
-    });
+    try {
+      await updateLeaveStatus(selectedReq.id, newStatus, note);
 
-    setSelectedReq(null);
-    setModalType(null);
-    setNote('');
+      addToast({
+        type: modalType === 'approve' ? 'success' : 'error',
+        title: `Leave ${newStatus}`,
+        message: `${selectedReq.employeeName}'s ${selectedReq.type} has been ${newStatus.toLowerCase()}.`
+      });
+
+      setSelectedReq(null);
+      setModalType(null);
+      setNote('');
+    } catch (err) {
+      console.error('[HRLeaveRequests] Error processing leave request:', err);
+      addToast({
+        type: 'error',
+        title: 'Action Failed',
+        message: err.message || 'Failed to update leave request. Please try again.'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const filtered = leaveRequests.filter((r) => {
+    const raw = (r.status || '').toLowerCase();
     if (filter === 'All') return true;
-    return r.status === filter;
+    return raw === filter.toLowerCase();
   });
 
   const columns = [
-    { header: 'Request ID', accessor: 'id', cellClassName: 'font-mono text-xs font-bold text-slate-800' },
+    {
+      header: 'Request ID',
+      accessor: 'id',
+      cellClassName: 'font-mono text-xs font-bold text-slate-800',
+      render: (row) => <span>{row.displayId || row.id}</span>
+    },
     {
       header: 'Employee',
       render: (row) => (
@@ -72,9 +100,9 @@ export const HRLeaveRequests = () => {
       render: (row) => (
         <Badge
           variant={
-            row.status === 'Approved'
+            row.status?.toLowerCase() === 'approved'
               ? 'success'
-              : row.status === 'Rejected'
+              : row.status?.toLowerCase() === 'rejected'
               ? 'danger'
               : 'warning'
           }
@@ -88,7 +116,7 @@ export const HRLeaveRequests = () => {
     {
       header: 'Actions',
       render: (row) => (
-        row.status === 'Pending' ? (
+        row.status?.toLowerCase() === 'pending' ? (
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -124,21 +152,37 @@ export const HRLeaveRequests = () => {
           </p>
         </div>
 
-        {/* Status Filter */}
-        <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
-          {['All', 'Pending', 'Approved', 'Rejected'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilter(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                filter === st
-                  ? 'bg-purple-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+        <div className="flex items-center gap-3">
+          {isSupabaseAuth && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<RotateCw className={`w-3.5 h-3.5 ${isLoadingLeaves ? 'animate-spin' : ''}`} />}
+              onClick={() => {
+                if (fetchLeaveRequests) fetchLeaveRequests();
+              }}
+              disabled={isLoadingLeaves}
             >
-              {st}
-            </button>
-          ))}
+              Refresh
+            </Button>
+          )}
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
+            {['All', 'Pending', 'Approved', 'Rejected'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setFilter(st)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  filter.toLowerCase() === st.toLowerCase()
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -148,7 +192,7 @@ export const HRLeaveRequests = () => {
       {selectedReq && (
         <Modal
           isOpen={!!selectedReq}
-          onClose={() => setSelectedReq(null)}
+          onClose={() => !isProcessing && setSelectedReq(null)}
           title={`${modalType === 'approve' ? 'Approve' : 'Reject'} Leave Request`}
           subtitle={`Decision for ${selectedReq.employeeName} (${selectedReq.type})`}
         >
@@ -166,18 +210,20 @@ export const HRLeaveRequests = () => {
                 rows={3}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
+                placeholder="Enter feedback or coverage approval notes..."
                 className="w-full rounded-lg border border-slate-300 text-sm p-2.5 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setSelectedReq(null)}>
+              <Button variant="outline" size="sm" onClick={() => setSelectedReq(null)} disabled={isProcessing}>
                 Cancel
               </Button>
               <Button
                 variant={modalType === 'approve' ? 'success' : 'danger'}
                 size="sm"
                 onClick={handleConfirmAction}
+                isLoading={isProcessing}
               >
                 Confirm {modalType === 'approve' ? 'Approval' : 'Rejection'}
               </Button>

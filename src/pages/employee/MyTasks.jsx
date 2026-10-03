@@ -8,49 +8,103 @@ import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { SearchInput } from '../../components/common/SearchInput';
-import { Plus, CheckSquare, Calendar, Flag, AlertCircle } from 'lucide-react';
+import { Plus, CheckSquare, Calendar, Flag, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 
 export const MyTasks = () => {
   const { user } = useAuth();
-  const { tasks, addTask, toggleTaskStatus } = usePortalData();
+  const { tasks, projects, addTask, toggleTaskStatus, isLoadingTasks, taskError, fetchTasks } = usePortalData();
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // New task form state
   const [newTitle, setNewTitle] = useState('');
-  const [newProject, setNewProject] = useState('Client Enterprise Portal V3');
+  const [newProject, setNewProject] = useState('');
   const [newPriority, setNewPriority] = useState('medium');
   const [newDueDate, setNewDueDate] = useState('');
   const [newDescription, setNewDescription] = useState('');
 
-  const handleCreateTask = (e) => {
+  const projectOptions = projects.length > 0
+    ? projects.map((p) => p.name)
+    : [
+        'Client Enterprise Portal V3',
+        'CloudMigration 2.0',
+        'AI Analytics Suite',
+        'DigiX Mobile Core Redesign',
+        'Zero-Trust IAM Compliance Audit'
+      ];
+
+  const handleOpenModal = () => {
+    setNewProject(projectOptions[0] || 'Client Enterprise Portal V3');
+    setIsModalOpen(true);
+  };
+
+  const handleCreateTask = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    addTask({
-      title: newTitle,
-      project: newProject,
-      assignedTo: user.name,
-      priority: newPriority,
-      dueDate: newDueDate || '2026-09-30',
-      description: newDescription
-    });
+    setIsSubmitting(true);
+    try {
+      await addTask({
+        title: newTitle.trim(),
+        project: newProject || projectOptions[0],
+        assignedTo: user?.name || 'Tarumani Bharath Raj',
+        assignedToDbId: user?.dbId,
+        priority: newPriority,
+        dueDate: newDueDate || new Date().toISOString().split('T')[0],
+        description: newDescription.trim()
+      });
 
-    setIsModalOpen(false);
-    setNewTitle('');
-    setNewDescription('');
-    addToast({
-      type: 'success',
-      title: 'Task Created',
-      message: 'New task added to your backlog.'
-    });
+      setIsModalOpen(false);
+      setNewTitle('');
+      setNewDescription('');
+      addToast({
+        type: 'success',
+        title: 'Task Created',
+        message: 'New task added to backlog and saved to Supabase.'
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Task Creation Failed',
+        message: err.message || 'Unable to create task in Supabase.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleStatus = async (task) => {
+    try {
+      const willBeDone = task.status !== 'completed';
+      await toggleTaskStatus(task.id);
+      addToast({
+        type: willBeDone ? 'success' : 'info',
+        title: willBeDone ? 'Task Finished!' : 'Task Incomplete',
+        message: task.title
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Failed to Update Task',
+        message: err.message || 'Could not update task status in Supabase.'
+      });
+    }
   };
 
   const filteredTasks = tasks.filter((t) => {
-    const isAssigned = t.assignedTo === user?.name || t.assignedTo === 'Tarumani Bharath Raj' || t.assignedTo === user?.id;
+    const isAssigned =
+      !t.assignedTo ||
+      t.assignedTo === user?.name ||
+      t.assignedTo === 'Tarumani Bharath Raj' ||
+      t.assignedToId === user?.id ||
+      t.assignedToDbId === user?.dbId ||
+      user?.role === 'admin' ||
+      user?.role === 'hr';
+
     const matchesTab =
       activeTab === 'all'
         ? true
@@ -62,8 +116,8 @@ export const MyTasks = () => {
         ? t.priority === 'urgent' || t.priority === 'high'
         : true;
     const matchesSearch =
-      t.title.toLowerCase().includes(search.toLowerCase()) ||
-      t.project.toLowerCase().includes(search.toLowerCase());
+      (t.title || '').toLowerCase().includes(search.toLowerCase()) ||
+      (t.project || '').toLowerCase().includes(search.toLowerCase());
     return isAssigned && matchesTab && matchesSearch;
   });
 
@@ -89,7 +143,7 @@ export const MyTasks = () => {
           <Button
             size="sm"
             leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenModal}
           >
             Create Task
           </Button>
@@ -118,9 +172,31 @@ export const MyTasks = () => {
         ))}
       </div>
 
+      {/* Task Error Banner */}
+      {taskError && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <AlertCircle className="w-4 h-4 text-rose-500" />
+            <span>Failed to sync tasks from Supabase: {taskError}</span>
+          </div>
+          <button
+            onClick={() => fetchTasks()}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white border border-rose-300 rounded-md text-xs font-medium text-rose-700 hover:bg-rose-50"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Task List */}
       <div className="space-y-3">
-        {filteredTasks.length === 0 ? (
+        {isLoadingTasks && tasks.length === 0 ? (
+          <div className="py-16 flex flex-col items-center justify-center text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin text-digix-600 mb-2" />
+            <p className="text-xs font-medium text-slate-600">Loading your engineering backlog...</p>
+          </div>
+        ) : filteredTasks.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-6">
             <CheckSquare className="w-10 h-10 text-slate-300 mx-auto mb-2" />
             <p className="text-sm font-semibold text-slate-700">No tasks found</p>
@@ -144,14 +220,7 @@ export const MyTasks = () => {
                   <input
                     type="checkbox"
                     checked={isDone}
-                    onChange={() => {
-                      toggleTaskStatus(task.id);
-                      addToast({
-                        type: isDone ? 'info' : 'success',
-                        title: isDone ? 'Task Incomplete' : 'Task Finished!',
-                        message: task.title
-                      });
-                    }}
+                    onChange={() => handleToggleStatus(task)}
                     className="mt-1 w-4 h-4 rounded border-slate-300 text-digix-600 focus:ring-digix-500 cursor-pointer"
                   />
                   <div>
@@ -168,7 +237,7 @@ export const MyTasks = () => {
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-400">
-                      <span className="font-mono text-slate-500 font-semibold">{task.id}</span>
+                      <span className="font-mono text-slate-500 font-semibold">{task.displayId || task.id}</span>
                       <span>•</span>
                       <span className="text-slate-600">{task.project}</span>
                       <span>•</span>
@@ -198,7 +267,7 @@ export const MyTasks = () => {
                     variant={isDone ? 'success' : 'neutral'}
                     size="sm"
                   >
-                    {isDone ? 'Done' : task.status.replace('_', ' ')}
+                    {isDone ? 'Done' : (task.status || 'todo').replace('_', ' ')}
                   </Badge>
                 </div>
               </div>
@@ -227,13 +296,7 @@ export const MyTasks = () => {
             label="Associated Project"
             value={newProject}
             onChange={(e) => setNewProject(e.target.value)}
-            options={[
-              'Client Enterprise Portal V3',
-              'CloudMigration 2.0',
-              'AI Analytics Suite',
-              'DigiX Mobile Core Redesign',
-              'Zero-Trust IAM Compliance Audit'
-            ]}
+            options={projectOptions}
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -270,10 +333,21 @@ export const MyTasks = () => {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm">
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={isSubmitting}
+            >
               Save Task
             </Button>
           </div>
@@ -282,3 +356,4 @@ export const MyTasks = () => {
     </div>
   );
 };
+

@@ -74,8 +74,8 @@ export const HRDashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Workforce"
-          value={employees.length + 238} // Realistic corporate headcount
-          subtitle="Full-time employees globally"
+          value={employees.length}
+          subtitle={`${employees.filter((e) => e.status === 'Active' || e.status === 'active').length} active personnel`}
           icon={Users}
           color="blue"
           onClick={() => navigate('/hr/employees')}
@@ -192,24 +192,30 @@ export const HRDashboard = () => {
             }
           >
             <div className="space-y-3">
-              {onboarding.map((item) => (
-                <div key={item.id} className="p-3.5 rounded-xl border border-slate-100 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{item.employeeName}</h4>
-                      <p className="text-xs text-slate-500">{item.role} • {item.department}</p>
-                    </div>
-                    <span className="text-xs font-bold text-slate-700">{item.progress}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-purple-600 rounded-full" style={{ width: `${item.progress}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[11px] text-slate-400 mt-2">
-                    <span>Buddy: {item.buddy}</span>
-                    <span>Join Date: {item.joinDate}</span>
-                  </div>
+              {onboarding.length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400">
+                  No active onboarding checklists.
                 </div>
-              ))}
+              ) : (
+                onboarding.map((item) => (
+                  <div key={item.id} className="p-3.5 rounded-xl border border-slate-100 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">{item.employeeName}</h4>
+                        <p className="text-xs text-slate-500">{item.role} • {item.department}</p>
+                      </div>
+                      <span className="text-xs font-bold text-slate-700">{item.progress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                      <div className="h-full bg-purple-600 rounded-full" style={{ width: `${item.progress}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-slate-400 mt-2">
+                      <span>Buddy: {item.buddy}</span>
+                      <span>Join Date: {item.joinDate}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
         </div>
@@ -218,20 +224,26 @@ export const HRDashboard = () => {
         <div className="lg:col-span-5 space-y-6">
           <Card title="Department Distribution">
             <div className="space-y-3">
-              {Object.entries(departments).map(([dept, count]) => (
-                <div key={dept} className="space-y-1">
-                  <div className="flex justify-between text-xs text-slate-600">
-                    <span className="font-semibold">{dept}</span>
-                    <span>{count * 24} staff</span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-digix-500 rounded-full"
-                      style={{ width: `${(count / employees.length) * 100}%` }}
-                    />
-                  </div>
+              {Object.keys(departments).length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400">
+                  No department headcount recorded.
                 </div>
-              ))}
+              ) : (
+                Object.entries(departments).map(([dept, count]) => (
+                  <div key={dept} className="space-y-1">
+                    <div className="flex justify-between text-xs text-slate-600">
+                      <span className="font-semibold">{dept}</span>
+                      <span>{count} {count === 1 ? 'member' : 'members'}</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-digix-500 rounded-full"
+                        style={{ width: `${(count / (employees.length || 1)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
 
@@ -249,20 +261,26 @@ export const HRDashboard = () => {
             }
           >
             <div className="space-y-2.5">
-              {candidates.slice(0, 4).map((cand) => (
-                <div
-                  key={cand.id}
-                  className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50 text-xs"
-                >
-                  <div>
-                    <span className="font-bold text-slate-900 block">{cand.name}</span>
-                    <span className="text-slate-500">{cand.roleApplied}</span>
-                  </div>
-                  <Badge variant="purple" size="sm">
-                    {cand.stage}
-                  </Badge>
+              {candidates.length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400">
+                  No candidates in pipeline.
                 </div>
-              ))}
+              ) : (
+                candidates.slice(0, 4).map((cand) => (
+                  <div
+                    key={cand.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50 text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-slate-900 block">{cand.name}</span>
+                      <span className="text-slate-500">{cand.roleApplied}</span>
+                    </div>
+                    <Badge variant="purple" size="sm">
+                      {cand.stage}
+                    </Badge>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
         </div>

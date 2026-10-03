@@ -1,45 +1,103 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { ShieldCheck, Server, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Server, AlertTriangle, RotateCw } from 'lucide-react';
 
 export const SystemSettings = () => {
-  const { systemSettings, updateSystemSettings } = usePortalData();
+  const {
+    systemSettings,
+    updateSystemSettings,
+    fetchSystemSettings,
+    isLoadingSystemSettings,
+    systemSettingsError
+  } = usePortalData();
   const { addToast } = useToast();
 
-  const [portalName, setPortalName] = useState(systemSettings.portalName);
-  const [companyName, setCompanyName] = useState(systemSettings.companyName);
-  const [timeout, setTimeoutVal] = useState(systemSettings.sessionTimeoutMinutes);
-  const [enforce2FA, setEnforce2FA] = useState(systemSettings.enforce2FA);
-  const [allowRemote, setAllowRemote] = useState(systemSettings.allowRemotePunchIn);
+  const [portalName, setPortalName] = useState(systemSettings?.portalName || '');
+  const [companyName, setCompanyName] = useState(systemSettings?.companyName || '');
+  const [timeout, setTimeoutVal] = useState(systemSettings?.sessionTimeoutMinutes ?? 60);
+  const [enforce2FA, setEnforce2FA] = useState(Boolean(systemSettings?.enforce2FA));
+  const [allowRemote, setAllowRemote] = useState(Boolean(systemSettings?.allowRemotePunchIn));
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    if (systemSettings) {
+      setPortalName(systemSettings.portalName || '');
+      setCompanyName(systemSettings.companyName || '');
+      setTimeoutVal(systemSettings.sessionTimeoutMinutes ?? 60);
+      setEnforce2FA(Boolean(systemSettings.enforce2FA));
+      setAllowRemote(Boolean(systemSettings.allowRemotePunchIn));
+    }
+  }, [systemSettings]);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    updateSystemSettings({
-      portalName,
-      companyName,
-      sessionTimeoutMinutes: Number(timeout),
-      enforce2FA,
-      allowRemotePunchIn: allowRemote
-    });
-    addToast({
-      type: 'success',
-      title: 'System Settings Saved',
-      message: 'Portal environment configuration synchronized.'
-    });
+    setIsSaving(true);
+    try {
+      await updateSystemSettings({
+        portalName,
+        companyName,
+        sessionTimeoutMinutes: Number(timeout),
+        enforce2FA,
+        allowRemotePunchIn: allowRemote
+      });
+      addToast({
+        type: 'success',
+        title: 'System Settings Saved',
+        message: 'Portal environment configuration synchronized with Supabase.'
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Save Failed',
+        message: err.message || 'Unable to update system settings in Supabase.'
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">Global System Settings</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Configure DigiX portal branding, identity parameters, and security policies.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <Server className="w-5 h-5 text-digix-500" />
+            Global System Settings
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Configure DigiX portal branding, identity parameters, and security policies.
+          </p>
+        </div>
+
+        <button
+          onClick={() => fetchSystemSettings?.()}
+          disabled={isLoadingSystemSettings}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-xs disabled:opacity-50"
+          title="Refresh settings from Supabase"
+        >
+          <RotateCw className={`w-3.5 h-3.5 ${isLoadingSystemSettings ? 'animate-spin text-digix-500' : ''}`} />
+          Refresh
+        </button>
       </div>
+
+      {systemSettingsError && (
+        <div className="flex items-center justify-between p-3.5 bg-red-50/80 border border-red-200 rounded-xl text-xs text-red-700">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+            <span>Failed to load system settings from Supabase: {systemSettingsError}</span>
+          </div>
+          <button
+            onClick={() => fetchSystemSettings?.()}
+            className="px-2.5 py-1 bg-white border border-red-200 text-red-700 font-medium rounded-lg hover:bg-red-50 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <Card title="Brand & Tenant Details">
         <form onSubmit={handleSave} className="space-y-4">
@@ -100,7 +158,7 @@ export const SystemSettings = () => {
           </div>
 
           <div className="flex justify-end pt-3">
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant="primary" size="sm" isLoading={isSaving}>
               Save Global Configuration
             </Button>
           </div>

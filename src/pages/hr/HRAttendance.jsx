@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { usePortalData, getLocalDateKey, getLiveWorkingDuration, formatDateDisplay } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
-import { Card, StatCard } from '../../components/common/Card';
+import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
 import { Badge } from '../../components/common/Badge';
@@ -24,11 +25,22 @@ import {
   Building,
   Filter,
   Eye,
-  Calendar
+  Calendar,
+  RotateCw,
+  Mail,
+  Briefcase
 } from 'lucide-react';
 
 export const HRAttendance = () => {
-  const { employees, attendance, leaveRequests } = usePortalData();
+  const { isSupabaseAuth } = useAuth();
+  const {
+    employees,
+    attendance,
+    leaveRequests,
+    fetchAttendanceRecords,
+    isLoadingAttendance,
+    attendanceError
+  } = usePortalData();
   const { addToast } = useToast();
 
   const [search, setSearch] = useState('');
@@ -46,16 +58,22 @@ export const HRAttendance = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Fetch Supabase attendance on mount for HR/Admin
+  useEffect(() => {
+    if (isSupabaseAuth) {
+      fetchAttendanceRecords();
+    }
+  }, [isSupabaseAuth, fetchAttendanceRecords]);
+
   const todayKey = getLocalDateKey(currentTime);
 
   // Derive Today's Comprehensive Roster
-  // Combine all active employees with their attendance records
   const todayAttendanceList = attendance.filter(
     (a) => a.dateKey === todayKey || a.dateKey === 'TODAY' || a.date === 'Today' || a.date === formatDateDisplay(currentTime)
   );
 
   // Compute Summary Metrics for Today
-  const totalEmployeesCount = employees.length;
+  const totalEmployeesCount = employees.length || new Set(attendance.map((a) => a.employeeUuid || a.employeeId)).size || 1;
   const currentlyActiveCount = todayAttendanceList.filter((a) => a.isActive).length;
   const lateTodayCount = todayAttendanceList.filter((a) => a.status === 'LATE').length;
   const presentTodayCount = todayAttendanceList.filter((a) => a.status === 'PRESENT' || a.status === 'LATE' || a.isActive).length;
@@ -94,6 +112,46 @@ export const HRAttendance = () => {
 
     return matchesDept && matchesSearch && matchesStatus;
   });
+
+  // Export Attendance to CSV
+  const handleExportCsv = () => {
+    if (!filteredAttendance || filteredAttendance.length === 0) {
+      addToast({
+        type: 'warning',
+        title: 'Export Empty',
+        message: 'No attendance records available to export for current filter.'
+      });
+      return;
+    }
+
+    const headers = ['Date', 'Employee ID', 'Employee Name', 'Department', 'Check In', 'Check Out', 'Working Hours', 'Status', 'Work Mode'];
+    const rows = filteredAttendance.map((row) => [
+      `"${row.date || ''}"`,
+      `"${row.employeeId || ''}"`,
+      `"${row.employeeName || ''}"`,
+      `"${row.department || ''}"`,
+      `"${row.checkIn || '--'}"`,
+      `"${row.isActive ? 'Currently Active' : row.checkOut || '--'}"`,
+      `"${row.isActive ? getLiveWorkingDuration(row, currentTime).formatted : row.workingHours || '--'}"`,
+      `"${row.isActive ? 'ACTIVE' : row.status || 'PRESENT'}"`,
+      `"${row.workMode || 'On-Site'}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `digix_attendance_${dateFilter.toLowerCase()}_${todayKey}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    addToast({
+      type: 'success',
+      title: 'Report Exported',
+      message: `Downloaded CSV roster with ${filteredAttendance.length} attendance records.`
+    });
+  };
 
   const columns = [
     {
@@ -215,7 +273,7 @@ export const HRAttendance = () => {
       cellClassName: 'text-xs text-slate-500',
       render: (row) => (
         <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium border border-slate-200">
-          {row.workMode || 'Hybrid'}
+          {row.workMode || 'On-Site'}
         </span>
       )
     },
@@ -249,21 +307,44 @@ export const HRAttendance = () => {
           </p>
         </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          leftIcon={<Download className="w-4 h-4" />}
-          onClick={() =>
-            addToast({
-              type: 'info',
-              title: 'Report Exported',
-              message: 'Daily attendance roster generated as CSV.'
-            })
-          }
-        >
-          Export Attendance
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {isSupabaseAuth && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<RotateCw className={`w-4 h-4 ${isLoadingAttendance ? 'animate-spin' : ''}`} />}
+              onClick={() => fetchAttendanceRecords()}
+              disabled={isLoadingAttendance}
+              className="text-xs font-semibold"
+            >
+              {isLoadingAttendance ? 'Syncing...' : 'Refresh'}
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            variant="outline"
+            leftIcon={<Download className="w-4 h-4" />}
+            onClick={handleExportCsv}
+            className="text-xs font-semibold"
+          >
+            Export Attendance
+          </Button>
+        </div>
       </div>
+
+      {/* Error State Banner */}
+      {attendanceError && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>Unable to sync organizational attendance records. Please verify your connection.</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => fetchAttendanceRecords()} className="text-xs">
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Top 6 Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
@@ -301,7 +382,7 @@ export const HRAttendance = () => {
             <div className="flex items-center gap-1.5">
               <span className="text-2xl font-extrabold text-emerald-700">{currentlyActiveCount}</span>
               <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">
-                🟢 Live
+                Live
               </span>
             </div>
             <p className="text-[10px] text-emerald-700 mt-0.5">Online Workstations</p>
@@ -373,7 +454,7 @@ export const HRAttendance = () => {
             className="w-full sm:w-auto rounded-xl border border-slate-300 text-xs py-2 px-3 bg-white font-medium text-slate-700"
           >
             <option value="All">All Statuses</option>
-            <option value="Active">🟢 Active Now</option>
+            <option value="Active">Active Now</option>
             <option value="Present">Present</option>
             <option value="Late">Late</option>
             <option value="On Leave">On Leave</option>
@@ -416,7 +497,11 @@ export const HRAttendance = () => {
           columns={columns}
           data={filteredAttendance}
           onRowClick={(row) => setSelectedRecord(row)}
-          emptyMessage="No attendance records match the selected filters."
+          emptyMessage={
+            isLoadingAttendance
+              ? "Fetching organizational attendance roster from Supabase..."
+              : "No attendance records match the selected filters."
+          }
         />
       </Card>
 
@@ -456,12 +541,30 @@ export const HRAttendance = () => {
                     {selectedRecord.isActive ? 'ACTIVE' : selectedRecord.status || 'PRESENT'}
                   </Badge>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
                   <span className="font-mono text-slate-700 font-semibold">{selectedRecord.employeeId}</span>
+                  {selectedRecord.email && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 text-slate-600">
+                        <Mail className="w-3 h-3 text-slate-400" />
+                        {selectedRecord.email}
+                      </span>
+                    </>
+                  )}
+                  {selectedRecord.designation && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 text-slate-600">
+                        <Briefcase className="w-3 h-3 text-slate-400" />
+                        {selectedRecord.designation}
+                      </span>
+                    </>
+                  )}
                   <span>•</span>
                   <span>{selectedRecord.department}</span>
                   <span>•</span>
-                  <span className="text-digix-600 font-medium">{selectedRecord.workMode || 'Hybrid'}</span>
+                  <span className="text-digix-600 font-medium">{selectedRecord.workMode || 'On-Site'}</span>
                 </div>
               </div>
             </div>

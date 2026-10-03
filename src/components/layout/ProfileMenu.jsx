@@ -3,15 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
-import { LogOut, User, RefreshCw, Shield, ChevronDown, Check } from 'lucide-react';
+import { LogOut, User, RefreshCw, Shield, ChevronDown, Check, AlertTriangle } from 'lucide-react';
+import { Modal } from '../common/Modal';
+import { Button } from '../common/Button';
 
 export const ProfileMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, role, logout } = useAuth();
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const { user, role, logout, isSupabaseAuth } = useAuth();
   const { resetDemoData, recordLogoutAttendance } = usePortalData();
   const { addToast } = useToast();
   const navigate = useNavigate();
   const menuRef = useRef(null);
+
+  // Production Data-Safety Guard:
+  // Never show demo data reset for authenticated Supabase accounts or in production builds
+  const canResetDemo = !isSupabaseAuth && !user?.isSupabaseAuth && !import.meta.env.PROD;
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -23,11 +30,11 @@ export const ProfileMenu = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (user) {
       recordLogoutAttendance(user);
     }
-    logout();
+    await logout();
     navigate('/login');
     addToast({
       type: 'info',
@@ -36,14 +43,16 @@ export const ProfileMenu = () => {
     });
   };
 
-  const handleReset = () => {
-    resetDemoData();
-    setIsOpen(false);
-    addToast({
-      type: 'success',
-      title: 'Demo Data Reset',
-      message: 'Initial dummy state restored across all modules.'
-    });
+  const handleConfirmReset = () => {
+    setShowConfirmModal(false);
+    const didReset = resetDemoData();
+    if (didReset) {
+      addToast({
+        type: 'success',
+        title: 'Demo Data Reset',
+        message: 'Initial dummy state restored for demo accounts.'
+      });
+    }
   };
 
   if (!user) return null;
@@ -89,7 +98,7 @@ export const ProfileMenu = () => {
             <button
               onClick={() => {
                 setIsOpen(false);
-                navigate(role === 'employee' ? '/employee/profile' : role === 'hr' ? '/hr/profiles' : '/admin/users');
+                navigate(role === 'employee' ? '/employee/profile' : (role === 'hr' || role === 'hr_manager') ? '/hr/profiles' : '/admin/users');
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors text-left"
             >
@@ -97,13 +106,19 @@ export const ProfileMenu = () => {
               <span>View Profile</span>
             </button>
 
-            <button
-              onClick={handleReset}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded-lg transition-colors text-left"
-            >
-              <RefreshCw className="w-4 h-4 text-amber-500" />
-              <span>Reset Demo Data</span>
-            </button>
+            {canResetDemo && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  setShowConfirmModal(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded-lg transition-colors text-left"
+              >
+                <RefreshCw className="w-4 h-4 text-amber-500" />
+                <span>Reset Demo Data</span>
+              </button>
+            )}
           </div>
 
           <div className="pt-1 border-t border-slate-100">
@@ -117,6 +132,46 @@ export const ProfileMenu = () => {
           </div>
         </div>
       )}
+
+      {canResetDemo && (
+        <Modal
+          isOpen={showConfirmModal}
+          onClose={() => setShowConfirmModal(false)}
+          title="Reset Demo Data?"
+          subtitle="Restore initial demo data for local offline development."
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs leading-relaxed">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900 mb-0.5">Local Demo Environment Only</p>
+                <p>This will reset in-memory state and local demo storage keys to default starter data. This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowConfirmModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={handleConfirmReset}
+              >
+                Reset Demo Data
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
+

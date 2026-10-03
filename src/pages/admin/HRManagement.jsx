@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePortalData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -6,9 +7,10 @@ import { Badge } from '../../components/common/Badge';
 import { Users, UserCheck, ShieldCheck, Mail } from 'lucide-react';
 
 export const HRManagement = () => {
+  const { employees } = usePortalData();
   const { addToast } = useToast();
 
-  const hrStaff = [
+  const fallbackHrStaff = [
     {
       name: "Priyanka",
       title: "HR Manager",
@@ -38,9 +40,32 @@ export const HRManagement = () => {
     }
   ];
 
+  // Derive HR leads from live employees list if available
+  const liveHrEmployees = (employees || []).filter(e =>
+    e.department?.toLowerCase().includes('hr') ||
+    e.department?.toLowerCase().includes('human') ||
+    e.role === 'hr' ||
+    e.role === 'hr_manager' ||
+    e.roleTitle?.toLowerCase().includes('hr') ||
+    e.roleTitle?.toLowerCase().includes('people')
+  );
+
+  const displayStaff = liveHrEmployees.length > 0
+    ? liveHrEmployees.map(e => ({
+        name: e.name,
+        title: e.roleTitle || 'HR Manager',
+        division: e.department || 'Human Resources',
+        employeesCovered: employees.length,
+        avatar: e.avatar,
+        status: e.status || 'Active',
+        email: e.email
+      }))
+    : fallbackHrStaff;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
         <div>
           <h2 className="text-xl font-bold text-slate-900">HR Division Administration</h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -63,7 +88,7 @@ export const HRManagement = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {hrStaff.map((staff, idx) => (
+        {displayStaff.map((staff, idx) => (
           <div
             key={idx}
             className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-subtle flex flex-col justify-between"
